@@ -1,0 +1,3 @@
+- 👋 Hi, I’m Alex
+- 👀 I’m interested in IT, cars, music, crypto and many other things
+- 🌱 I’m currently learning Docker
