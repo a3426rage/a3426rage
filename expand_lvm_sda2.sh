@@ -9,8 +9,16 @@ fi
 # Installeer vereiste tools als ze niet aanwezig zijn
 for cmd in growpart pvresize lvextend resize2fs xfs_growfs; do
   if ! command -v $cmd &> /dev/null; then
-    echo "$cmd is niet geïnstalleerd. Installeer het met: sudo yum install <tool>"
-    exit 1
+    if [ "$cmd" == "growpart" ]; then
+      echo "$cmd is niet geïnstalleerd. Installeer het met: sudo apt install cloud-guest-utils"
+      sudo apt install cloud-guest-utils -y
+    elif [ "$cmd" == "pvresize" ]; then
+      echo "$cmd is niet geïnstalleerd. Installeer het met: sudo apt install lvm2"
+      sudo apt install lvm2 -y
+    else
+      echo "$cmd is niet geïnstalleerd. Installeer het met: sudo apt install $cmd"
+      sudo apt install $cmd -y
+    fi
   fi
 done
 
