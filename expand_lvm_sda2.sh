@@ -7,7 +7,7 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 # Installeer vereiste tools als ze niet aanwezig zijn
-for cmd in growpart pvresize lvextend resize2fs xfs_growfs; do
+for cmd in growpart pvresize lvextend resize2fs xfsgrowfs; do
   if ! command -v $cmd &> /dev/null; then
     if [ "$cmd" == "growpart" ]; then
       echo "$cmd is niet geïnstalleerd. Installeer het met: sudo apt install cloud-guest-utils"
@@ -59,7 +59,7 @@ elif [[ "$FS_TYPE" == "xfs" ]]; then
     echo "Fout: Geen mountpoint gevonden voor $LV_NAME" >&2
     exit 1
   fi
-  xfs_growfs "$mount_point"
+  xfsgrowfs "$mount_point"
 else
   echo "Fout: Ondersteund bestandssysteem ($FS_TYPE) niet gedetecteerd. Ondersteund: ext4, ext3, xfs." >&2
   exit 1
