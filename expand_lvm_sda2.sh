@@ -1,86 +1,63 @@
 #!/bin/bash
 
-set -e
-
-# Check root privileges
-if [[ $EUID -ne 0 ]]; then
-  echo "Dit script moet als root worden uitgevoerd." >&2
+# Zorg ervoor dat het script met rootrechten draait
+if [ "$EUID" -ne 0 ]; then
+  echo "Dit script moet met root-rechten worden uitgevoerd."
   exit 1
 fi
 
-echo "Controleren of growpart, pvresize, lvextend en resize2fs beschikbaar zijn..."
-# Controleer of de benodigde tools zijn geïnstalleerd
-for cmd in growpart pvresize lvextend resize2fs; do
+# Installeer vereiste tools als ze niet aanwezig zijn
+for cmd in growpart pvresize lvextend resize2fs xfs_growfs; do
   if ! command -v $cmd &> /dev/null; then
-    echo "Fout: $cmd is niet geïnstalleerd. Installeer het met: apt install $cmd" >&2
+    echo "$cmd is niet geïnstalleerd. Installeer het met: sudo yum install <tool>"
     exit 1
   fi
 done
 
-PARTITION="/dev/sda2"
-DISK="/dev/sda"
+# Vergroot de partitie (/dev/sda2) met beschikbare vrije ruimte
+growpart /dev/sda 2
 
-echo "Huidige configuratie:"
-lsblk
+# Resize Physical Volume (PV) naar de nieuwe schijfruimte
+pvresize /dev/sda2
 
-# Vergroot de partitie
-echo "Uitbreiden van partitie $PARTITION naar maximale grootte..."
-growpart "$DISK" 2
-
-# Controleer of /dev/sda2 een Physical Volume is
-if ! pvs | grep -q "$PARTITION"; then
-  echo "Fout: $PARTITION is geen Physical Volume (LVM). Controleer de configuratie." >&2
+# Verkrijg de naam van de Volume Group (VG) automatisch
+VG_NAME=$(vgs --noheadings -o vg_name | awk '{print $1}')
+if [ -z "$VG_NAME" ]; then
+  echo "Fout: Geen Volume Group gevonden!" >&2
   exit 1
 fi
 
-echo "Uitbreiden van het Physical Volume $PARTITION..."
-pvresize "$PARTITION"
-
-# Geef een overzicht van Volume Groups
-echo "Beschikbare Volume Groups:"
-vgs
-
-# Vraag om de naam van de Volume Group
-read -rp "Voer de naam van de Volume Group in: " VG
-
-# Controleer of de VG bestaat
-if ! vgs | grep -q "^$VG"; then
-  echo "Fout: Volume Group $VG bestaat niet. Controleer de naam." >&2
+# Verkrijg de naam van het Logical Volume (LV) automatisch
+LV_NAME=$(lvs --noheadings -o lv_name | awk '{print $1}')
+if [ -z "$LV_NAME" ]; then
+  echo "Fout: Geen Logical Volume gevonden!" >&2
   exit 1
 fi
 
-echo "Beschikbare ruimte in $VG:"
-vgdisplay "$VG" | grep "Free  PE"
+# Vergroot het Logical Volume met de nieuwe beschikbare ruimte
+lvextend -l +100%FREE /dev/$VG_NAME/$LV_NAME
 
-# Vraag om de naam van het Logical Volume
-read -rp "Voer de naam van het Logical Volume in (bijv. root): " LV
+# Verkrijg het bestandssysteemtype automatisch
+FS_TYPE=$(blkid -o value -s TYPE /dev/$VG_NAME/$LV_NAME)
 
-LV_PATH="/dev/$VG/$LV"
-
-# Controleer of het LV bestaat
-if ! lvs | grep -q "$LV_PATH"; then
-  echo "Fout: Logical Volume $LV_PATH bestaat niet. Controleer de naam." >&2
-  exit 1
-fi
-
-# Vergroot het Logical Volume
-echo "Uitbreiden van $LV_PATH naar maximale grootte..."
-lvextend -l +100%FREE "$LV_PATH"
-
-# Controleer het bestandssysteem
-echo "Controleren op bestandssysteem van $LV_PATH..."
-FS_TYPE=$(lsblk -no FSTYPE "$LV_PATH")
-
+# Vergroot het bestandssysteem afhankelijk van het type
 if [[ "$FS_TYPE" =~ ^(ext4|ext3)$ ]]; then
-  echo "Bestandssysteem is $FS_TYPE. Bestandssysteem uitbreiden..."
-  resize2fs "$LV_PATH"
+  echo "Bestandssysteem is $FS_TYPE. Uitbreiden van het bestandssysteem..."
+  resize2fs /dev/$VG_NAME/$LV_NAME
 elif [[ "$FS_TYPE" == "xfs" ]]; then
-  echo "Bestandssysteem is XFS. Bestandssysteem uitbreiden..."
-  xfs_growfs "$LV_PATH"
+  echo "Bestandssysteem is XFS. Uitbreiden van het bestandssysteem..."
+  mount_point=$(findmnt -n -o TARGET -S /dev/$VG_NAME/$LV_NAME)
+  if [ -z "$mount_point" ]; then
+    echo "Fout: Geen mountpoint gevonden voor $LV_NAME" >&2
+    exit 1
+  fi
+  xfs_growfs "$mount_point"
 else
   echo "Fout: Ondersteund bestandssysteem ($FS_TYPE) niet gedetecteerd. Ondersteund: ext4, ext3, xfs." >&2
   exit 1
 fi
 
-echo "De uitbreiding is voltooid. Huidige configuratie:"
+# Toon de nieuwe schijfruimte en LVM-configuratie
 lsblk
+vgs
+lvs
