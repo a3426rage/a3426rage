@@ -7,7 +7,7 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 # Installeer vereiste tools als ze niet aanwezig zijn
-for cmd in growpart pvresize lvextend resize2fs xfsgrowfs; do
+for cmd in growpart pvresize lvextend resize2fs xfs_growfs; do
   if ! command -v $cmd &> /dev/null; then
     if [ "$cmd" == "growpart" ]; then
       echo "$cmd is niet geïnstalleerd. Installeer het met: sudo apt install cloud-guest-utils"
@@ -15,6 +15,9 @@ for cmd in growpart pvresize lvextend resize2fs xfsgrowfs; do
     elif [ "$cmd" == "pvresize" ]; then
       echo "$cmd is niet geïnstalleerd. Installeer het met: sudo apt install lvm2"
       sudo apt install lvm2 -y
+    elif [ "$cmd" == "xfs_growfs" ]; then
+      echo "$cmd is niet geïnstalleerd. Installeer het met: sudo apt install xfsprogs"
+      sudo apt install xfsprogs -y
     else
       echo "$cmd is niet geïnstalleerd. Installeer het met: sudo apt install $cmd"
       sudo apt install $cmd -y
@@ -23,7 +26,7 @@ for cmd in growpart pvresize lvextend resize2fs xfsgrowfs; do
 done
 
 # Vergroot de partitie (/dev/sda2) met beschikbare vrije ruimte
-growpart /dev/sda 2
+growpart /dev/sda2
 
 # Resize Physical Volume (PV) naar de nieuwe schijfruimte
 pvresize /dev/sda2
@@ -59,7 +62,7 @@ elif [[ "$FS_TYPE" == "xfs" ]]; then
     echo "Fout: Geen mountpoint gevonden voor $LV_NAME" >&2
     exit 1
   fi
-  xfsgrowfs "$mount_point"
+  xfs_growfs "$mount_point"
 else
   echo "Fout: Ondersteund bestandssysteem ($FS_TYPE) niet gedetecteerd. Ondersteund: ext4, ext3, xfs." >&2
   exit 1
